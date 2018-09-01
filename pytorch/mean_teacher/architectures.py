@@ -209,7 +209,7 @@ class FeedForwardMLPEmbed_RE(nn.Module):
 
         ## Intialize the embeddings if pre-init enabled ? -- or in the fwd pass ?
         ## create : layer1 + ReLU
-        self.layer1 = nn.Linear(embedding_size, hidden_sz, bias=True) ## concatenate entity and pattern embeddings
+        self.layer1 = nn.Linear(embedding_size, hidden_sz, bias=True)
         self.activation = nn.ReLU()
         ## create : layer2 + Softmax: Create softmax here
         self.layer2 = nn.Linear(hidden_sz, output_sz, bias=True)
@@ -286,7 +286,7 @@ class SeqModel_RE(nn.Module):
         self.lstm = nn.LSTM(word_embedding_size, lstm_hidden_size, num_layers=1, bidirectional=True)
 
         # *2 is for bidir
-        self.layer1 = nn.Linear(lstm_hidden_size * 2, hidden_size, bias=True)  # concatenate entity and pattern embeddings and followed by a linear layer;
+        self.layer1 = nn.Linear(lstm_hidden_size * 2, hidden_size, bias=True)
         self.activation = nn.ReLU()  # non-linear activation
         self.layer2 = nn.Linear(hidden_size, output_size, bias=True)
 
@@ -302,7 +302,7 @@ class SeqModel_RE(nn.Module):
         sorted_lengths, perm_idx = seq_lengths.sort(0, descending=True)
         input_sorted = input[perm_idx]
 
-        embed = self.embeddings(input_sorted).permute(1, 0, 2)  # compute the embeddings of the words in the entity (Note the permute step)
+        embed = self.embeddings(input_sorted).permute(1, 0, 2)
         #print("shape of embed:", embed.shape)
 
         packed = pack_padded_sequence(embed, sorted_lengths.cpu().numpy(), batch_first=False)
@@ -310,7 +310,7 @@ class SeqModel_RE(nn.Module):
         # https://discuss.pytorch.org/t/rnn-module-weights-are-not-part-of-single-contiguous-chunk-of-memory/6011/13
         self.lstm.flatten_parameters()
 
-        _, (lstm_out, _) = self.lstm(packed)  # bi-LSTM over entities, hidden state is initialized to 0 if not provided
+        _, (lstm_out, _) = self.lstm(packed)
         lstm_out = torch.cat([lstm_out[0], lstm_out[1]], 1) # roll out the 2 tuple output each of the LSTMs
 
         res = self.layer1(lstm_out)

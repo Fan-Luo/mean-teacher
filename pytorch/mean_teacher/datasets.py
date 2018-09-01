@@ -353,7 +353,7 @@ class REDataset(Dataset):
         self.args = args
         self.max_entity_len = args.max_entity_len  # 8
         self.max_inbetween_len = args.max_inbetween_len  # 60
-        self.pad_len = self.max_inbetween_len + self.max_entity_len*2 #+ max_inbetween_len
+        self.pad_len = self.max_inbetween_len # + self.max_entity_len*2
 
         if args.eval_subdir not in dir:
 
@@ -447,8 +447,8 @@ class REDataset(Dataset):
     # idx is the index of the datum
     def __getitem__(self, idx):
         #List[Int]
-        entity1_words_id = [self.word_vocab.get_id(w) for w in self.entities1_words[idx]]
-        entity2_words_id = [self.word_vocab.get_id(w) for w in self.entities2_words[idx]]
+        # entity1_words_id = [self.word_vocab.get_id(w) for w in self.entities1_words[idx]]
+        # entity2_words_id = [self.word_vocab.get_id(w) for w in self.entities2_words[idx]]
         # entity1_words_id_padded = self.pad_item(entity1_words_id)
         # entity2_words_id_padded = self.pad_item(entity2_words_id)
         # entity1_datum = torch.LongTensor(entity1_words_id)
@@ -457,7 +457,7 @@ class REDataset(Dataset):
         # todo: make it a function to decide what to do with the words in-between (chunks_inbetween_words)
         ##########
         #self.chunks_inbetween_words[idx]:  List(Str)
-        inbetween_max = self.pad_len - len(entity1_words_id) - len(entity2_words_id)
+        inbetween_max = self.pad_len # - len(entity1_words_id) - len(entity2_words_id)
         if len(self.chunks_inbetween_words[idx]) > inbetween_max:    # need to truncation
             # l = 0
             # refined_inbetween = list()
@@ -486,7 +486,7 @@ class REDataset(Dataset):
 
         # List(Int) -- the vocabulary indices
         inbetween_words_id = [self.word_vocab.get_id(w) for w in self.chunks_inbetween_words[idx]]
-        original_len = len(entity1_words_id) + len(entity2_words_id) + len(inbetween_words_id)   #before padding
+        original_len = len(inbetween_words_id)  #len(entity1_words_id) + len(entity2_words_id) + len(inbetween_words_id)   #before padding
 
         # Training:
         if self.transform is not None:
@@ -505,23 +505,23 @@ class REDataset(Dataset):
                 # List(Int) -- the indices of whole shebang
 
                 #student_id = inbetween_words_id_dropout[0]
-                student_id = entity1_words_id + inbetween_words_id_dropout[0] + entity2_words_id
+                student_id = inbetween_words_id_dropout[0] #entity1_words_id + inbetween_words_id_dropout[0] + entity2_words_id
                 student_id_padded = self.pad_item(student_id)
                 datum_student = torch.LongTensor(student_id_padded)
 
                 #teacher_id = inbetween_words_id_dropout[1]
-                teacher_id = entity1_words_id + inbetween_words_id_dropout[1] + entity2_words_id
+                teacher_id = inbetween_words_id_dropout[1] #entity1_words_id + inbetween_words_id_dropout[1] + entity2_words_id
                 teacher_id_padded = self.pad_item(teacher_id)
                 datum_teacher = torch.LongTensor(teacher_id_padded)
                 datums = (datum_student, datum_teacher)
 
             else:
-                datum = entity1_words_id + inbetween_words_id_dropout + entity2_words_id
+                datum = inbetween_words_id_dropout #entity1_words_id + inbetween_words_id_dropout + entity2_words_id
                 datum_padded = self.pad_item(datum)
                 datums = torch.LongTensor(datum_padded)
         # test:
         else:
-            datum = entity1_words_id + inbetween_words_id + entity2_words_id
+            datum = inbetween_words_id #entity1_words_id + inbetween_words_id + entity2_words_id
             datum_padded = self.pad_item(datum)
             datums = torch.LongTensor(datum_padded)
 
