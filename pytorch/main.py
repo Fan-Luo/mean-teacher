@@ -444,9 +444,12 @@ def train(train_loader, model, ema_model, optimizer, epoch, dataset, log):
     global train_teacher_true_noNA
 
     if torch.cuda.is_available():
-        class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cuda()
+    #     class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cuda()
+        class_criterion = nn.MarginRankingLoss(margin=1.0).cuda()
     else:
-        class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()
+    #     class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()
+        class_criterion = nn.MarginRankingLoss(margin=1.0).cpu()
+
 
     if args.consistency_type == 'mse':
         consistency_criterion = losses.softmax_mse_loss
@@ -595,10 +598,15 @@ def train(train_loader, model, ema_model, optimizer, epoch, dataset, log):
             class_logit, cons_logit = logit1, logit1    # class_logit.data.size(): torch.Size([256, 56])
             res_loss = 0
 
-        class_loss = class_criterion(class_logit, target_var) / minibatch_size  ## DONE: AJAY - WHAT IF target_var NOT PRESENT (UNLABELED DATAPOINT) ? Ans: See  ignore index in  `class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()`
+
+        x1_score_correct, x2_score_incorrect, y = pairwise_marginLoss(class_logit, target_var)
+        class_loss = class_criterion(x1_score_correct, x2_score_incorrect, y) / minibatch_size
+        # class_loss = class_criterion(class_logit, target_var) / minibatch_size  ## DONE: AJAY - WHAT IF target_var NOT PRESENT (UNLABELED DATAPOINT) ? Ans: See  ignore index in  `class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()`
         meters.update('class_loss', class_loss.data[0])
 
-        ema_class_loss = class_criterion(ema_logit, target_var) / minibatch_size ## DONE: AJAY - WHAT IF target_var NOT PRESENT (UNLABELED DATAPOINT) ? Ans: See  ignore index in  `class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()`
+        x1_score_correct_ema, x2_score_incorrect_ema, _ = pairwise_marginLoss(ema_logit, target_var)
+        ema_class_loss = class_criterion(x1_score_correct_ema, x2_score_incorrect_ema, y) / minibatch_size
+        # ema_class_loss = class_criterion(ema_logit, target_var) / minibatch_size ## DONE: AJAY - WHAT IF target_var NOT PRESENT (UNLABELED DATAPOINT) ? Ans: See  ignore index in  `class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()`
         meters.update('ema_class_loss', ema_class_loss.data[0])    # Do we need this?
 
         if args.consistency:     # if pass --consistency in running script
@@ -792,9 +800,11 @@ def validate(eval_loader, model, log, global_step, epoch, dataset, result_dir, m
     global test_teacher_true_noNA
 
     if torch.cuda.is_available():
-        class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cuda()
+    #     class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cuda()
+        class_criterion = nn.MarginRankingLoss(margin=1.0).cuda()
     else:
-        class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()
+    #     class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()
+        class_criterion = nn.MarginRankingLoss(margin=1.0).cpu()
 
     meters = AverageMeterSet()
 
@@ -892,7 +902,9 @@ def validate(eval_loader, model, log, global_step, epoch, dataset, result_dir, m
         else:
             output1 = model(input_var) ##, output2 = model(input_var)
         #softmax1, softmax2 = F.softmax(output1, dim=1), F.softmax(output2, dim=1)
-        class_loss = class_criterion(output1, target_var) / minibatch_size
+        # class_loss = class_criterion(output1, target_var) / minibatch_size
+        x1_score_correct, x2_score_incorrect, y = pairwise_marginLoss(output1, target_var)
+        class_loss = class_criterion(x1_score_correct, x2_score_incorrect, y) / minibatch_size
 
         if args.dataset in ['riedel', 'gids']:
             correct_test, num_target_notNA_test, num_pred_notNA_test = prec_rec(output1.data, target_var.data, NA_label, topk=(1,))
@@ -1333,6 +1345,38 @@ def dump_result(batch_id, args, output, target, dataset, perm_idx, model_type='t
                 line = target_label + '\t' + pred_label + '\t' + str(match) + '\t' + str(float(score[p])) + '\n'
                 fo.write(line)
 
+
+def pairwise_marginLoss(model_output, target_var):
+
+    minibatch_size = len(target_var)
+
+    target_expanded = target_var.view(minibatch_size, -1).expand_as(model_output)
+
+    # Make the mask for extracting the score of the target label
+    numLabels = len(model_output[0])
+    indices_val = torch.from_numpy(np.arange(numLabels))
+    indices_tensor = indices_val.expand_as(model_output)
+    correct_mask = torch.eq(target_expanded, Variable(indices_tensor))
+
+    # Apply mask
+    x1_score_correct = torch.masked_select(model_output, correct_mask)
+
+    # mask for extracting the highest score of incoorect label
+    incorrect_mask = torch.ne(target_expanded, Variable(indices_tensor))
+    incorrect_scores = torch.masked_select(model_output, incorrect_mask).view(minibatch_size, -1)
+    x2_score_incorrect = torch.max(incorrect_scores, 1)[0]
+
+    # 1 means, x1_score_correct should be larger than x2_score_incorrect
+    y = torch.FloatTensor(x1_score_correct.size()).fill_(1)
+
+    if torch.cuda.is_available():
+        y = y.cuda()
+    else:
+        y = y.cpu()
+
+    y = Variable(y)
+
+    return x1_score_correct, x2_score_incorrect, y
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)

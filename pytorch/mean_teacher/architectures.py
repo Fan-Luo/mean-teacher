@@ -214,6 +214,7 @@ class FeedForwardMLPEmbed_RE(nn.Module):
         ## create : layer2 + Softmax: Create softmax here
         self.layer2 = nn.Linear(hidden_sz, output_sz, bias=True)
         # self.softmax = nn.Softmax(dim=1) ## IMPT NOTE: Removing the softmax from here as it is done in the loss function
+        self.softmax = nn.Softmax(dim=1)  # softmax back in for the marginLoss
 
     def forward(self, input_tuple):
         input = input_tuple[0]
@@ -254,6 +255,7 @@ class FeedForwardMLPEmbed_RE(nn.Module):
         res = self.layer1(avg)
         res = self.activation(res)
         res = self.layer2(res)
+        res = self.softmax(res)   # softmax back in for the marginLoss
 
         return res
 
@@ -289,6 +291,7 @@ class SeqModel_RE(nn.Module):
         self.layer1 = nn.Linear(lstm_hidden_size * 2, hidden_size, bias=True)  # concatenate entity and pattern embeddings and followed by a linear layer;
         self.activation = nn.ReLU()  # non-linear activation
         self.layer2 = nn.Linear(hidden_size, output_size, bias=True)
+        self.softmax = nn.Softmax(dim=1)  # softmax back in for the marginLoss
 
     # todo: Is padding the way done here ok ? should I explicitly tell what the pad value is ?
     def forward(self, input_tuple):
@@ -316,6 +319,7 @@ class SeqModel_RE(nn.Module):
         res = self.layer1(lstm_out)
         res = self.activation(res)
         res = self.layer2(res)
+        res = self.softmax(res)  # softmax back in for the marginLoss
         return res, perm_idx
 
 
