@@ -600,12 +600,22 @@ def train(train_loader, model, ema_model, optimizer, epoch, dataset, log):
 
 
         x1_score_correct, x2_score_incorrect, y = pairwise_marginLoss(class_logit, target_var)
+        if torch.cuda.is_available():
+            y = torch.autograd.Variable(y).cuda()
+        else:
+            y = torch.autograd.Variable(y).cpu()
         class_loss = class_criterion(x1_score_correct, x2_score_incorrect, y) / minibatch_size
         # class_loss = class_criterion(class_logit, target_var) / minibatch_size  ## DONE: AJAY - WHAT IF target_var NOT PRESENT (UNLABELED DATAPOINT) ? Ans: See  ignore index in  `class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()`
         meters.update('class_loss', class_loss.data[0])
 
-        x1_score_correct_ema, x2_score_incorrect_ema, _ = pairwise_marginLoss(ema_logit, target_var)
-        ema_class_loss = class_criterion(x1_score_correct_ema, x2_score_incorrect_ema, y) / minibatch_size
+        x1_score_correct_ema, x2_score_incorrect_ema, y_ema = pairwise_marginLoss(ema_logit, target_var)
+        if torch.cuda.is_available():
+            y_ema = torch.autograd.Variable(y_ema, volatile=True).cuda()
+        else:
+            y_ema = torch.autograd.Variable(y_ema, volatile=True).cpu()
+
+        assert y == y_ema
+        ema_class_loss = class_criterion(x1_score_correct_ema, x2_score_incorrect_ema, y_ema) / minibatch_size
         # ema_class_loss = class_criterion(ema_logit, target_var) / minibatch_size ## DONE: AJAY - WHAT IF target_var NOT PRESENT (UNLABELED DATAPOINT) ? Ans: See  ignore index in  `class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()`
         meters.update('ema_class_loss', ema_class_loss.data[0])    # Do we need this?
 
@@ -904,6 +914,11 @@ def validate(eval_loader, model, log, global_step, epoch, dataset, result_dir, m
         #softmax1, softmax2 = F.softmax(output1, dim=1), F.softmax(output2, dim=1)
         # class_loss = class_criterion(output1, target_var) / minibatch_size
         x1_score_correct, x2_score_incorrect, y = pairwise_marginLoss(output1, target_var)
+        if torch.cuda.is_available():
+            y = torch.autograd.Variable(y.cuda(async=True), volatile=True)
+        else:
+            y = torch.autograd.Variable(y.cpu(), volatile=True)
+
         class_loss = class_criterion(x1_score_correct, x2_score_incorrect, y) / minibatch_size
 
         if args.dataset in ['riedel', 'gids']:
@@ -1368,11 +1383,6 @@ def pairwise_marginLoss(model_output, target_var):
 
     # 1 means, x1_score_correct should be larger than x2_score_incorrect
     y = torch.FloatTensor(x1_score_correct.size()).fill_(1)
-
-    if torch.cuda.is_available():
-        y = torch.autograd.Variable(y).cuda()
-    else:
-        y = torch.autograd.Variable(y).cpu()
 
     return x1_score_correct, x2_score_incorrect, y
 
