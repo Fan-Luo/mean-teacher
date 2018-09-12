@@ -1370,11 +1370,9 @@ def pairwise_marginLoss(model_output, target_var):
     y = torch.FloatTensor(x1_score_correct.size()).fill_(1)
 
     if torch.cuda.is_available():
-        y = y.cuda()
+        y = torch.autograd.Variable(y).cuda()
     else:
-        y = y.cpu()
-
-    y = Variable(y)
+        y = torch.autograd.Variable(y).cpu()
 
     return x1_score_correct, x2_score_incorrect, y
 
