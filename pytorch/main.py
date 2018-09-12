@@ -1370,14 +1370,18 @@ def pairwise_marginLoss(model_output, target_var):
     # Make the mask for extracting the score of the target label
     numLabels = len(model_output[0])
     indices_val = torch.from_numpy(np.arange(numLabels))
-    indices_tensor = indices_val.expand_as(model_output)
-    correct_mask = torch.eq(target_expanded, Variable(indices_tensor))
+    if torch.cuda.is_available():
+        indices_tensor = torch.autograd.Variable(indices_val.expand_as(model_output)).cuda()
+    else:
+        indices_tensor = torch.autograd.Variable(indices_val.expand_as(model_output)).cpu()
+
+    correct_mask = torch.eq(target_expanded, indices_tensor)
 
     # Apply mask
     x1_score_correct = torch.masked_select(model_output, correct_mask)
 
     # mask for extracting the highest score of incoorect label
-    incorrect_mask = torch.ne(target_expanded, Variable(indices_tensor))
+    incorrect_mask = torch.ne(target_expanded, indices_tensor)
     incorrect_scores = torch.masked_select(model_output, incorrect_mask).view(minibatch_size, -1)
     x2_score_incorrect = torch.max(incorrect_scores, 1)[0]
 
