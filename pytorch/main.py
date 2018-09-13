@@ -614,7 +614,7 @@ def train(train_loader, model, ema_model, optimizer, epoch, dataset, log):
         else:
             y_ema = torch.autograd.Variable(y_ema, volatile=True).cpu()
 
-        assert y == y_ema
+        assert y.data == y_ema.data
         ema_class_loss = class_criterion(x1_score_correct_ema, x2_score_incorrect_ema, y_ema) / minibatch_size
         # ema_class_loss = class_criterion(ema_logit, target_var) / minibatch_size ## DONE: AJAY - WHAT IF target_var NOT PRESENT (UNLABELED DATAPOINT) ? Ans: See  ignore index in  `class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()`
         meters.update('ema_class_loss', ema_class_loss.data[0])    # Do we need this?
@@ -1380,6 +1380,12 @@ def pairwise_marginLoss(model_output, target_var):
     # Apply mask
     x1_score_correct = torch.masked_select(model_output, correct_mask)
 
+    x1_ignore_Nolabel = x1_score_correct.data.masked_fill_(target_var.data.eq(NO_LABEL), 100.0)
+    if torch.cuda.is_available():
+        x1_ignore_Nolabel = torch.autograd.Variable(x1_ignore_Nolabel).cuda()
+    else:
+        x1_ignore_Nolabel = torch.autograd.Variable(x1_ignore_Nolabel).cpu()
+
     # mask for extracting the highest score of incoorect label
     incorrect_mask = torch.ne(target_expanded, indices_tensor)
     incorrect_scores = torch.masked_select(model_output, incorrect_mask).view(minibatch_size, -1)
@@ -1388,7 +1394,7 @@ def pairwise_marginLoss(model_output, target_var):
     # 1 means, x1_score_correct should be larger than x2_score_incorrect
     y = torch.FloatTensor(x1_score_correct.size()).fill_(1)
 
-    return x1_score_correct, x2_score_incorrect, y
+    return x1_ignore_Nolabel, x2_score_incorrect, y
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
