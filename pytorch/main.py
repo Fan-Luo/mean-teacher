@@ -614,7 +614,8 @@ def train(train_loader, model, ema_model, optimizer, epoch, dataset, log):
         else:
             y_ema = torch.autograd.Variable(y_ema, volatile=True).cpu()
 
-        assert y.data == y_ema.data
+        for d in range(len(y)):
+            assert y.data[d] == y_ema.data[d]
         ema_class_loss = class_criterion(x1_score_correct_ema, x2_score_incorrect_ema, y_ema) / minibatch_size
         # ema_class_loss = class_criterion(ema_logit, target_var) / minibatch_size ## DONE: AJAY - WHAT IF target_var NOT PRESENT (UNLABELED DATAPOINT) ? Ans: See  ignore index in  `class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cpu()`
         meters.update('ema_class_loss', ema_class_loss.data[0])    # Do we need this?
